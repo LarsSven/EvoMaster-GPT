@@ -14,7 +14,7 @@ public class MicronautTestController extends EmbeddedSutController {
 
     private MicronautApplication application;
 
-    public MicronautTestController() { setControllerPort(0); }
+    public MicronautTestController() { setControllerPort(40100); }
 
     @Override
     public List<DbSpecification> getDbSpecifications() {
