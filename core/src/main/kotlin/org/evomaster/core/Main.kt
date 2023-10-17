@@ -302,6 +302,10 @@ class Main {
             val base = BaseModule(args)
             val config = base.getEMConfig()
 
+            if(config.useGptModel) {
+                println("Using the GPT model for REST endpoints...")
+            }
+
             if(config.problemType == EMConfig.ProblemType.DEFAULT){
                 /*
                     Note that, in case ob BB-testing, this would had been already modified
@@ -521,6 +525,7 @@ class Main {
 
             LoggingUtil.getInfoLogger().info("Starting to generate test cases")
 
+            // GPT: Generate test cases
             return imp.search { solution: Solution<*>,
                                 snapshotTimestamp: String ->
                 writeTestsAsSnapshots(injector, solution, controllerInfo, snapshotTimestamp)

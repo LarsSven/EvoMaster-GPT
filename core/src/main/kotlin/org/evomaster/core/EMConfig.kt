@@ -707,6 +707,10 @@ class EMConfig {
     @Folder
     var outputFolder = "src/em"
 
+    @Important(2.0)
+    @Cfg("Whether to use the GPT model for REST endpoints")
+    var useGptModel = false
+
 
     @Important(2.0)
     @Cfg("The name prefix of generated file(s) with the test cases, without file type extension." +

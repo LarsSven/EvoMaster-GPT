@@ -27,6 +27,9 @@ class RestSampler : AbstractRestSampler(){
         (0 until n).forEach {
             actions.add(sampleRandomAction(0.05) as RestCallAction)
         }
+
+        //GPT: Random sample
+
         val ind = RestIndividual(actions, SampleType.RANDOM, mutableListOf(), this, time.evaluatedIndividuals)
         ind.doGlobalInitialize(searchGlobalState)
 //        ind.computeTransitiveBindingGenes()
@@ -48,8 +51,8 @@ class RestSampler : AbstractRestSampler(){
     }
 
 
+    // GPT: Smart sample
     override fun smartSample(): RestIndividual {
-
         /*
             At the beginning, sample from this set, until it is empty
          */

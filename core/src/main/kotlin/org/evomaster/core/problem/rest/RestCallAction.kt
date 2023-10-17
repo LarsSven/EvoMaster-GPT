@@ -18,6 +18,8 @@ import org.evomaster.core.search.service.Randomness
 import java.net.URLEncoder
 
 
+// GPT: RestCallAction
+
 class RestCallAction(
     /**
      * Identifier unique within the individual

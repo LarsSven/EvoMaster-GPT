@@ -75,6 +75,7 @@ abstract class Sampler<T> : TrackOperator where T : Individual {
             return seededIndividuals.removeLast()
         }
 
+        // GPT: Sampler
         val ind = if (forceRandomSample) {
             sampleAtRandom()
         } else if ( config.isEnabledSmartSampling() && (hasSpecialInitForSmartSampler() ||  randomness.nextBoolean(config.probOfSmartSampling))) {
