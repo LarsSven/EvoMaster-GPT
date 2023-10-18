@@ -10,26 +10,14 @@ import org.evomaster.core.problem.rest.RestPath
 
 class GptSampler : AbstractRestSampler() {
     override fun customizeAdHocInitialIndividuals() {
+        println("Initial")
         adHocInitialIndividuals.clear()
 
-        sampleEachEndpoint(NoAuth())
-
-        authentications.forEach { auth ->
-            sampleEachEndpoint(auth)
+        for (i in 0 until 10) {
+            val ind = createIndividual(SampleType.SMART, mutableListOf(generateRestCall()))
+            ind.doGlobalInitialize(searchGlobalState)
+            adHocInitialIndividuals.add(ind)
         }
-    }
-
-    private fun sampleEachEndpoint(auth: HttpWsAuthenticationInfo) {
-        actionCluster.asSequence()
-            .filter { a -> a.value is RestCallAction }
-            .forEach { a ->
-                val copy = a.value.copy() as RestCallAction
-                copy.auth = auth
-                copy.doInitialize(randomness)
-                val ind = createIndividual(SampleType.SMART, mutableListOf(copy))
-                ind.doGlobalInitialize(searchGlobalState)
-                adHocInitialIndividuals.add(ind)
-            }
     }
 
     override fun sampleAtRandom(): RestIndividual {
@@ -37,8 +25,10 @@ class GptSampler : AbstractRestSampler() {
         val n = randomness.nextInt(1, getMaxTestSizeDuringSampler())
 
         (0 until n).forEach {
-            actions.add(generateRestCall())
+            actions.add(sampleRandomAction(0.05) as RestCallAction)
         }
+
+        //GPT: Random sample
 
         val ind = RestIndividual(actions, SampleType.RANDOM, mutableListOf(), this, time.evaluatedIndividuals)
         ind.doGlobalInitialize(searchGlobalState)
@@ -46,6 +36,7 @@ class GptSampler : AbstractRestSampler() {
     }
 
     fun generateRestCall(): RestCallAction {
+        println("generateRestCall")
         return RestCallAction(
             id = "id",
             verb = HttpVerb.GET,
