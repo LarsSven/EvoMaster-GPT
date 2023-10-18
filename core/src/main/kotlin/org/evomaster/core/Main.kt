@@ -350,6 +350,8 @@ class Main {
                 EMConfig.ProblemType.REST -> {
                     if (config.blackBox) {
                         BlackBoxRestModule(config.bbExperiments)
+                    } else if (config.useGptModel) {
+                        GptModule()
                     } else if (config.isEnabledResourceStrategy()) {
                         ResourceRestModule()
                     } else {

@@ -3,8 +3,10 @@ package org.evomaster.core.problem.rest.service
 import org.evomaster.core.problem.enterprise.SampleType
 import org.evomaster.core.problem.httpws.auth.HttpWsAuthenticationInfo
 import org.evomaster.core.problem.httpws.auth.NoAuth
+import org.evomaster.core.problem.rest.HttpVerb
 import org.evomaster.core.problem.rest.RestCallAction
 import org.evomaster.core.problem.rest.RestIndividual
+import org.evomaster.core.problem.rest.RestPath
 
 class GptSampler : AbstractRestSampler() {
     override fun customizeAdHocInitialIndividuals() {
@@ -44,6 +46,17 @@ class GptSampler : AbstractRestSampler() {
     }
 
     fun generateRestCall(): RestCallAction {
-
+        return RestCallAction(
+            id = "id",
+            verb = HttpVerb.GET,
+            path = RestPath("/"),
+            parameters = mutableListOf(),
+            auth = NoAuth(),
+            saveLocation = false,
+            locationId = null,
+            produces = listOf(),
+            responseRefs = mutableMapOf(),
+            skipOracleChecks = false
+        )
     }
 }
