@@ -26,7 +26,7 @@ class GptSampler : AbstractRestSampler() {
     }
 
     fun generateRestCall(): RestCallAction {
-        println("generateRestCall")
+        // TODO: Implement GPT
         return RestCallAction(
             id = "id",
             verb = HttpVerb.GET,

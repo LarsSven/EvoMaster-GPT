@@ -32,10 +32,7 @@ import org.evomaster.core.remote.SutProblemException
 import org.evomaster.core.remote.service.RemoteController
 import org.evomaster.core.remote.service.RemoteControllerImplementation
 import org.evomaster.core.search.Solution
-import org.evomaster.core.search.algorithms.MioAlgorithm
-import org.evomaster.core.search.algorithms.MosaAlgorithm
-import org.evomaster.core.search.algorithms.RandomAlgorithm
-import org.evomaster.core.search.algorithms.WtsAlgorithm
+import org.evomaster.core.search.algorithms.*
 import org.evomaster.core.search.service.*
 import org.evomaster.core.search.service.monitor.SearchProcessMonitor
 import org.evomaster.core.search.service.mutator.genemutation.ArchiveImpactSelector
@@ -304,6 +301,9 @@ class Main {
 
             if(config.useGptModel) {
                 println("Using the GPT model for REST endpoints...")
+                if(config.algorithm != EMConfig.Algorithm.GPT) {
+                    throw IllegalStateException("The GPT model can only be used with the GPT algorithm")
+                }
             }
 
             if(config.problemType == EMConfig.ProblemType.DEFAULT){
@@ -501,6 +501,9 @@ class Main {
 
                 config.algorithm == EMConfig.Algorithm.MOSA ->
                     Key.get(object : TypeLiteral<MosaAlgorithm<RestIndividual>>() {})
+
+                config.algorithm == EMConfig.Algorithm.GPT ->
+                    Key.get(object : TypeLiteral<GptAlgorithm<RestIndividual>>() {})
 
                 else -> throw IllegalStateException("Unrecognized algorithm ${config.algorithm}")
             }
