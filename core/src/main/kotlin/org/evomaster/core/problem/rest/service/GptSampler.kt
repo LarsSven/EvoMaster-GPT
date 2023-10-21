@@ -1,15 +1,9 @@
 package org.evomaster.core.problem.rest.service
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
-import com.fasterxml.jackson.module.kotlin.KotlinModule
-import com.theokanning.openai.client.OpenAiApi
 import com.theokanning.openai.completion.chat.ChatCompletionRequest
 import com.theokanning.openai.completion.chat.ChatMessage
 import com.theokanning.openai.completion.chat.ChatMessageRole
 import com.theokanning.openai.service.OpenAiService
-import io.swagger.models.HttpMethod
-import kotlinx.serialization.Serializable
 import org.evomaster.core.Lazy
 import org.evomaster.core.problem.enterprise.SampleType
 import org.evomaster.core.problem.httpws.auth.NoAuth
@@ -21,12 +15,6 @@ import org.evomaster.core.problem.rest.param.PathParam
 import org.evomaster.core.search.tracer.Traceable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.yaml.snakeyaml.Yaml
-import org.yaml.snakeyaml.constructor.Constructor
-import java.io.Serial
-import java.util.Dictionary
-import java.util.LinkedHashMap
-import java.util.Objects
 
 class GptSampler : AbstractRestSampler() {
 
