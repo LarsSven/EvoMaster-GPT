@@ -1,8 +1,17 @@
 package org.evomaster.core.problem.rest.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.theokanning.openai.client.OpenAiApi
+import com.theokanning.openai.completion.chat.ChatCompletionRequest
+import com.theokanning.openai.completion.chat.ChatMessage
+import com.theokanning.openai.completion.chat.ChatMessageRole
+import com.theokanning.openai.service.OpenAiService
+import io.swagger.models.HttpMethod
+import kotlinx.serialization.Serializable
 import org.evomaster.core.Lazy
 import org.evomaster.core.problem.enterprise.SampleType
-import org.evomaster.core.problem.httpws.auth.HttpWsAuthenticationInfo
 import org.evomaster.core.problem.httpws.auth.NoAuth
 import org.evomaster.core.problem.rest.HttpVerb
 import org.evomaster.core.problem.rest.RestCallAction
@@ -12,11 +21,20 @@ import org.evomaster.core.problem.rest.param.PathParam
 import org.evomaster.core.search.tracer.Traceable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.yaml.snakeyaml.Yaml
+import org.yaml.snakeyaml.constructor.Constructor
+import java.io.Serial
+import java.util.Dictionary
+import java.util.LinkedHashMap
+import java.util.Objects
 
 class GptSampler : AbstractRestSampler() {
+
     override fun customizeAdHocInitialIndividuals() {
         println("Initial")
         adHocInitialIndividuals.clear()
+
+        generateRestCalls()
 
         for (i in 0 until 10) {
             val ind = createIndividual(SampleType.SMART, mutableListOf(generateRestCall()))
@@ -25,7 +43,220 @@ class GptSampler : AbstractRestSampler() {
         }
     }
 
-    fun generateRestCall(): RestCallAction {
+    private fun generateRestCalls(): List<RestCallAction> {
+
+//        val rawYAML = requestCallsFromGPT()
+        val rawYAML = """actions:
+  - verb: GET
+    path: /
+    parameters: []
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+      - name: y
+        value: 100
+  
+  - verb: POST
+    path: /
+    parameters: []
+  
+  - verb: GET
+    path: /api/tcpPort
+    parameters: []
+  
+  - verb: GET
+    path: /api/tcpPortFailed
+    parameters: []
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: invalidParam
+        value: abc
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 100
+      - name: invalidParam
+        value: abc
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: -50
+      - name: y
+        value: 200
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: null
+      - name: y
+        value: 0
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 500
+      - name: y
+        value: 1000
+        """
+        print(rawYAML)
+
+        // Parse YAML
+        return parseYAMLToCalls(rawYAML)
+    }
+
+    private fun requestCallsFromGPT(): String {
+        val token = System.getenv("OPENAI_TOKEN")
+
+        val service = OpenAiService(token)
+
+        val request = ChatCompletionRequest.builder()
+            .model("gpt-3.5-turbo")
+            .messages(
+                listOf(
+                    ChatMessage(
+                        ChatMessageRole.SYSTEM.value(),
+                        getSystemMessage()
+                    ),
+                    ChatMessage(
+                        ChatMessageRole.USER.value(),
+                        "Give me 10 potential requests to the API. Try to cover edge cases, and try to be creative with your chosen parameters."
+                    )
+                )
+            )
+            .build()
+
+        val response = service.createChatCompletion(request)
+        return response.choices[0].message.content
+    }
+
+    private fun getSystemMessage(): String {
+        // TODO: insert OpenAPI Schema
+        return """
+VERY IMPORTANT!!! ONLY RESPOND WITH A SINGLE VALID YAML FILE 
+
+You are being used as a Fuzzer on the given API. I want to cover as many edge cases as possible. Analyze the following OpenAPI schema: \"\"\"
+openapi: 3.0.1
+info:
+  title: Micronaut
+  description: Micronaut Latest E2E Test API
+  version: latest
+paths:
+  /:
+    get:
+      summary: Endpoint to trigger a Micronaut crash with HTTP 500
+      description: Used to test a crash scenario.
+      operationId: index
+      parameters: []
+      responses:
+        "500":
+          description: Expected outcome (HTTP 500)
+        "200":
+          description: Successful response (HTTP 200)
+          content:
+            application/json:
+              schema:
+                type: string
+    post:
+      summary: POST Controller for testing
+      description: Returns a HTTP 200 response
+      operationId: indexPost
+      parameters:
+      - name: x
+        in: query
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+      - name: "y"
+        in: query
+        required: false
+        schema:
+          minimum: 0
+          type: integer
+          format: int32
+          nullable: true
+      responses:
+        "200":
+          description: Successful POST request (HTTP 200)
+          content:
+            application/json:
+              schema:
+                type: string
+  /api/tcpPort:
+    get:
+      operationId: tcpPort
+      parameters: []
+      responses:
+        "200":
+          description: Successful response for TCP Port (HTTP 200)
+          content:
+            application/json:
+              schema:
+                type: string
+  /api/tcpPortFailed:
+    get:
+      operationId: tcpPortFailed
+      parameters: []
+      responses:
+        "200":
+          description: Successful response for a failed TCP Port (HTTP 200)
+          content:
+            application/json:
+              schema:
+                type: string
+\"\"\"
+
+I want any response to be of the following format YAML: \"\"\"
+actions:
+    - verb: <HTTP_VERB>
+      path: <PATH_TO_ENDPOINT>
+      parameters:
+        - name: <NAME_OF_PARAMETER>
+          value: <VALUE_OF_PARAMETER>
+        ...
+    ...
+\"\"\"
+"""
+    }
+
+    private fun parseYAMLToCalls(rawYAML: String): List<RestCallAction> {
+        val yaml = Yaml()
+        val actionsList: ActionsList = yaml.loadAs(rawYAML, ActionsList::class.java)
+
+        val actions: MutableList<RestCallAction> = mutableListOf()
+//        for (yamlAction in yamlActions) {
+//            val paramsAny = yamlAction["parameters"]
+//            actions.add(RestCallAction(
+//                id = "id",
+//                verb = HttpVerb.valueOf(yamlAction["verb"]!!),
+//                path = RestPath(yamlAction["path"]!!),
+//                parameters = mutableListOf(),
+//                auth = NoAuth(),
+//                saveLocation = false,
+//                locationId = null,
+//                produces = listOf(),
+//                responseRefs = mutableMapOf(),
+//                skipOracleChecks = false
+//            ))
+//        }
+
+        return actions
+    }
+
+    private fun generateRestCall(): RestCallAction {
         // TODO: Implement GPT
         return RestCallAction(
             id = "id",
