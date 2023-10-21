@@ -5,6 +5,7 @@ import org.evomaster.core.problem.rest.RestCallAction
 import org.evomaster.core.problem.rest.RestCallResult
 import org.evomaster.core.problem.rest.RestIndividual
 import org.evomaster.core.search.EvaluatedIndividual
+import org.evomaster.core.search.FitnessValue
 import org.evomaster.core.search.Individual
 import org.evomaster.core.search.service.SearchAlgorithm
 
@@ -28,7 +29,8 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
 
     private fun generateNewIndividual(ind: EvaluatedIndividual<T>): EvaluatedIndividual<T> {
         val restCalls =  improveRestCalls(
-            ind.individual.seeAllActions().mapTo(mutableListOf()) { it as RestCallAction }
+            ind.individual.seeAllActions().mapTo(mutableListOf()) { it as RestCallAction },
+            ind.fitness
         )
         val oldRestIndividual = ind.individual as RestIndividual
 
@@ -38,7 +40,7 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
         return ff.calculateCoverage(newRestIndividual as T) ?: throw Exception("Could not cast to T")
     }
 
-    private fun improveRestCalls(calls: MutableList<RestCallAction>): MutableList<RestCallAction> {
+    private fun improveRestCalls(calls: MutableList<RestCallAction>, fitness: FitnessValue): MutableList<RestCallAction> {
         // TODO: Implement GPT
         return calls
     }
