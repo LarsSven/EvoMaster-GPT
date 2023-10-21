@@ -112,7 +112,9 @@ class GptSampler : AbstractRestSampler() {
         print(rawYAML)
 
         // Parse YAML
-        return parseYAMLToCalls(rawYAML)
+//        return parseYAMLToCalls(rawYAML)
+
+        return listOf()
     }
 
     private fun requestCallsFromGPT(): String {
@@ -232,29 +234,29 @@ actions:
 """
     }
 
-    private fun parseYAMLToCalls(rawYAML: String): List<RestCallAction> {
-        val yaml = Yaml()
-        val actionsList: ActionsList = yaml.loadAs(rawYAML, ActionsList::class.java)
-
-        val actions: MutableList<RestCallAction> = mutableListOf()
-//        for (yamlAction in yamlActions) {
-//            val paramsAny = yamlAction["parameters"]
-//            actions.add(RestCallAction(
-//                id = "id",
-//                verb = HttpVerb.valueOf(yamlAction["verb"]!!),
-//                path = RestPath(yamlAction["path"]!!),
-//                parameters = mutableListOf(),
-//                auth = NoAuth(),
-//                saveLocation = false,
-//                locationId = null,
-//                produces = listOf(),
-//                responseRefs = mutableMapOf(),
-//                skipOracleChecks = false
-//            ))
-//        }
-
-        return actions
-    }
+//    private fun parseYAMLToCalls(rawYAML: String): List<RestCallAction> {
+//        val yaml = Yaml()
+//        val actionsList: ActionsList = yaml.loadAs(rawYAML, ActionsList::class.java)
+//
+//        val actions: MutableList<RestCallAction> = mutableListOf()
+////        for (yamlAction in yamlActions) {
+////            val paramsAny = yamlAction["parameters"]
+////            actions.add(RestCallAction(
+////                id = "id",
+////                verb = HttpVerb.valueOf(yamlAction["verb"]!!),
+////                path = RestPath(yamlAction["path"]!!),
+////                parameters = mutableListOf(),
+////                auth = NoAuth(),
+////                saveLocation = false,
+////                locationId = null,
+////                produces = listOf(),
+////                responseRefs = mutableMapOf(),
+////                skipOracleChecks = false
+////            ))
+////        }
+//
+//        return actions
+//    }
 
     private fun generateRestCall(): RestCallAction {
         // TODO: Implement GPT
