@@ -3,14 +3,15 @@ package org.evomaster.core.problem.rest.service
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import com.fasterxml.jackson.module.kotlin.KotlinModule
+import com.theokanning.openai.client.OpenAiApi
 import com.theokanning.openai.completion.chat.ChatCompletionRequest
 import com.theokanning.openai.completion.chat.ChatMessage
 import com.theokanning.openai.completion.chat.ChatMessageRole
 import com.theokanning.openai.service.OpenAiService
+import com.theokanning.openai.service.OpenAiService.*
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.evomaster.core.Lazy
-import org.evomaster.core.problem.api.param.Param
 import org.evomaster.core.problem.enterprise.SampleType
 import org.evomaster.core.problem.httpws.auth.NoAuth
 import org.evomaster.core.problem.rest.HttpVerb
@@ -19,14 +20,13 @@ import org.evomaster.core.problem.rest.RestIndividual
 import org.evomaster.core.problem.rest.RestPath
 import org.evomaster.core.problem.rest.param.BodyParam
 import org.evomaster.core.problem.rest.param.PathParam
-import org.evomaster.core.search.gene.Gene
 import org.evomaster.core.search.gene.collection.EnumGene
 import org.evomaster.core.search.gene.string.StringGene
 import org.evomaster.core.search.tracer.Traceable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import org.yaml.snakeyaml.Yaml
-import java.util.*
+import java.time.Duration
+
 
 data class GPTActions(
     val actions: List<GPTAction>,
@@ -57,143 +57,23 @@ class GptSampler : AbstractRestSampler() {
         }
 
         adHocInitialIndividuals.clear()
-        for (action in actions) {
-            val ind = createIndividual(SampleType.SMART, mutableListOf(action))
-            ind.doGlobalInitialize(searchGlobalState)
-            adHocInitialIndividuals.add(ind)
-        }
+        // NOTE: Here we can either add them separately or as once, not sure which is best.
+        val ind = createIndividual(SampleType.SMART, actions.toMutableList())
+        ind.doGlobalInitialize(searchGlobalState)
+        adHocInitialIndividuals.add(ind)
+//        for (action in actions) {
+//            val ind = createIndividual(SampleType.SMART, mutableListOf(action))
+//            ind.doGlobalInitialize(searchGlobalState)
+//            adHocInitialIndividuals.add(ind)
+//        }
     }
 
     private fun generateRestCalls(openApiUrl: String): List<RestCallAction> {
 
         // NOTE: here you can enable the call to GPT, but for testing use the hardcoded YAML
-        // val openApiBody = getOpenApiSchema(openApiUrl)
-        // val rawYAML = requestCallsFromGPT(openApiBody)
-        val rawYAML = """actions:
-  - verb: GET
-    path: /
-    parameters: []
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: 0
-      - name: y
-        value: 100
-  
-  - verb: POST
-    path: /
-    parameters: []
-  
-  - verb: GET
-    path: /api/tcpPort
-    parameters: []
-  
-  - verb: GET
-    path: /api/tcpPortFailed
-    parameters: []
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: invalidParam
-        value: abc
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: 100
-      - name: invalidParam
-        value: abc
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: -50
-      - name: y
-        value: 200
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: x
-        value: null
-      - name: y
-        value: 0
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: x
-        value: 500
-      - name: y
-        value: 1000
-
-  - verb: GET
-    path: /
-    parameters: []
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: 0
-      - name: y
-        value: 100
-  
-  - verb: POST
-    path: /
-    parameters: []
-  
-  - verb: GET
-    path: /api/tcpPort
-    parameters: []
-  
-  - verb: GET
-    path: /api/tcpPortFailed
-    parameters: []
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: invalidParam
-        value: abc
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: 100
-      - name: invalidParam
-        value: abc
-  
-  - verb: POST
-    path: /
-    parameters:
-      - name: x
-        value: -50
-      - name: y
-        value: 200
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: x
-        value: null
-      - name: y
-        value: 0
-  
-  - verb: GET
-    path: /
-    parameters:
-      - name: x
-        value: 500
-      - name: y
-        value: 1000
-        """
+//        val openApiBody = getOpenApiSchema(openApiUrl)
+//        val rawYAML = requestCallsFromGPT(openApiBody)
+        val rawYAML = getHardcodedYaml()
 
         // Parse YAML
         return parseYAMLToCalls(rawYAML)
@@ -212,7 +92,13 @@ class GptSampler : AbstractRestSampler() {
     private fun requestCallsFromGPT(openApiBody: String): String {
         val token = System.getenv("OPENAI_TOKEN")
 
-        val service = OpenAiService(token)
+        val mapper = defaultObjectMapper()
+        val client: OkHttpClient = defaultClient(token, Duration.ofSeconds(60))
+            .newBuilder()
+            .build()
+        val retrofit = defaultRetrofit(client, mapper)
+        val api: OpenAiApi = retrofit.create(OpenAiApi::class.java)
+        val service = OpenAiService(api)
 
         val request = ChatCompletionRequest.builder()
             .model("gpt-3.5-turbo")
@@ -224,7 +110,7 @@ class GptSampler : AbstractRestSampler() {
                     ),
                     ChatMessage(
                         ChatMessageRole.USER.value(),
-                        "Give me 10 potential requests to the API. Try to cover edge cases, and try to be creative with your chosen parameters."
+                        "Give me 50 potential requests to the API. Try to cover edge cases, and try to be creative with your chosen parameters."
                     )
                 )
             )
@@ -238,11 +124,11 @@ class GptSampler : AbstractRestSampler() {
         return """
 VERY IMPORTANT!!! ONLY RESPOND WITH A SINGLE VALID YAML FILE 
 
-You are being used as a Fuzzer on the given API. I want to cover as many edge cases as possible. Analyze the following OpenAPI schema: \"\"\"
+You are being used as a Fuzzer on the given API. I want to cover as many edge cases as possible. Analyze the following OpenAPI schema: '''
 $openApiBody
-\"\"\"
+'''
 
-I want any response to be of the following format YAML: \"\"\"
+I want any response to be of the following format YAML: '''
 actions:
     - verb: <HTTP_VERB>
       path: <PATH_TO_ENDPOINT>
@@ -251,7 +137,7 @@ actions:
           value: <VALUE_OF_PARAMETER>
         ...
     ...
-\"\"\"
+'''
 """
     }
 
@@ -669,5 +555,356 @@ actions:
         return actions.filter { a ->
             verbs.contains(a.verb)
         }
+    }
+
+    private fun getHardcodedYaml(): String {
+        return """actions:
+  # 1. GET request to the index endpoint
+  - verb: GET
+    path: /
+
+  # 2. GET request to the tcpPort endpoint
+  - verb: GET
+    path: /api/tcpPort
+
+  # 3. GET request to the tcpPortFailed endpoint
+  - verb: GET
+    path: /api/tcpPortFailed
+
+  # 4. POST request to the indexPost endpoint with both parameters
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+      - name: y
+        value: 0
+
+  # 5. POST request to the indexPost endpoint with only x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+
+  # 6. POST request to the indexPost endpoint with only y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: 0
+
+  # 7. POST request to the indexPost endpoint with invalid x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: -1
+
+  # 8. POST request to the indexPost endpoint with invalid y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: -1
+
+  # 9. POST request to the indexPost endpoint with null x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: null
+
+  # 10. POST request to the indexPost endpoint with null y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: null
+
+  # 11. POST request to the indexPost endpoint with string x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: "string_value"
+
+  # 12. POST request to the indexPost endpoint with string y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: "string_value"
+
+  # 13. POST request to the indexPost endpoint with decimal x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0.5
+
+  # 14. POST request to the indexPost endpoint with decimal y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: 0.5
+
+  # 15. POST request to the indexPost endpoint with large integer x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 1000000
+
+  # 16. POST request to the indexPost endpoint with large integer y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: 1000000
+
+  # 17. POST request to the indexPost endpoint with multiple occurrences of x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+      - name: x
+        value: 1
+
+  # 18. POST request to the indexPost endpoint with multiple occurrences of y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: 0
+      - name: y
+        value: 1
+
+  # 19. POST request to the indexPost endpoint with both parameters as arrays
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value:
+          - 0
+          - 1
+      - name: y
+        value:
+          - 0
+          - 1
+
+  # 20. GET request to the index endpoint with invalid query parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: invalidParam
+        value: invalidValue
+
+  # 21. POST request to the indexPost endpoint with invalid query parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: invalidParam
+        value: invalidValue
+
+  # 22. POST request to the indexPost endpoint without any parameters
+  - verb: POST
+    path: /
+
+  # 23. GET request to a non-existent endpoint
+  - verb: GET
+    path: /nonexistent
+
+  # 24. POST request to a non-existent endpoint
+  - verb: POST
+    path: /nonexistent
+
+  # 25. GET request to the index endpoint with empty query parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: ""
+
+  # 26. GET request to the index endpoint with empty query parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: ""
+
+  # 27. POST request to the indexPost endpoint with empty query parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: ""
+
+  # 28. POST request to the indexPost endpoint with empty query parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: ""
+
+  # 29. GET request to the index endpoint with missing required query parameter x
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: 0
+
+  # 30. GET request to the index endpoint with missing required query parameter y
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 0
+
+  # 31. POST request to the indexPost endpoint with missing required query parameter x
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: 0
+
+  # 32. POST request to the indexPost endpoint with missing required query parameter y
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+
+  # 33. POST request to the indexPost endpoint with missing required query parameters
+  - verb: POST
+    path: /
+
+  # 34. GET request to the index endpoint with negative integer x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: -1
+
+  # 35. GET request to the index endpoint with negative integer y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: -1
+
+  # 36. GET request to the index endpoint with null x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: null
+
+  # 37. GET request to the index endpoint with null y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: null
+
+  # 38. GET request to the index endpoint with string x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: "string_value"
+
+  # 39. GET request to the index endpoint with string y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: "string_value"
+
+  # 40. GET request to the index endpoint with decimal x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 0.5
+
+  # 41. GET request to the index endpoint with decimal y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: 0.5
+
+  # 42. GET request to the index endpoint with large integer x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 1000000
+
+  # 43. GET request to the index endpoint with large integer y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: 1000000
+
+  # 44. GET request to the index endpoint with multiple occurrences of x parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 0
+      - name: x
+        value: 1
+
+  # 45. GET request to the index endpoint with multiple occurrences of y parameter
+  - verb: GET
+    path: /
+    parameters:
+      - name: y
+        value: 0
+      - name: y
+        value: 1
+
+  # 46. GET request to the index endpoint with both parameters as arrays
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value:
+          - 0
+          - 1
+      - name: y
+        value:
+          - 0
+          - 1
+
+  # 47. POST request to the indexPost endpoint with negative integer x parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: -1
+
+  # 48. POST request to the indexPost endpoint with negative integer y parameter
+  - verb: POST
+    path: /
+    parameters:
+      - name: y
+        value: -1
+
+  # 49. GET request to the index endpoint with empty request body
+  - verb: GET
+    path: /
+    parameters: []
+
+  # 50. POST request to the index endpoint with empty request body
+  - verb: POST
+    path: /
+    parameters: []
+        """
     }
 }
