@@ -20,11 +20,8 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
     }
 
     override fun searchOnce() {
-        val individual = archive.sampleIndividual()
-
-        val newIndividual = generateNewIndividual(individual)
-
-        archive.addIfNeeded(newIndividual)
+        val individual = sampler.sample(false)
+        ff.calculateCoverage(individual)?.run { archive.addIfNeeded(this) }
     }
 
     private fun generateNewIndividual(ind: EvaluatedIndividual<T>): EvaluatedIndividual<T> {

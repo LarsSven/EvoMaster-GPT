@@ -1,39 +1,74 @@
 package org.evomaster.core.problem.rest.service
 
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import com.fasterxml.jackson.module.kotlin.KotlinModule
 import com.theokanning.openai.completion.chat.ChatCompletionRequest
 import com.theokanning.openai.completion.chat.ChatMessage
 import com.theokanning.openai.completion.chat.ChatMessageRole
 import com.theokanning.openai.service.OpenAiService
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import org.evomaster.core.Lazy
+import org.evomaster.core.problem.api.param.Param
 import org.evomaster.core.problem.enterprise.SampleType
 import org.evomaster.core.problem.httpws.auth.NoAuth
 import org.evomaster.core.problem.rest.HttpVerb
 import org.evomaster.core.problem.rest.RestCallAction
 import org.evomaster.core.problem.rest.RestIndividual
 import org.evomaster.core.problem.rest.RestPath
+import org.evomaster.core.problem.rest.param.BodyParam
 import org.evomaster.core.problem.rest.param.PathParam
+import org.evomaster.core.search.gene.Gene
+import org.evomaster.core.search.gene.collection.EnumGene
+import org.evomaster.core.search.gene.string.StringGene
 import org.evomaster.core.search.tracer.Traceable
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.yaml.snakeyaml.Yaml
+import java.util.*
+
+data class GPTActions(
+    val actions: List<GPTAction>,
+)
+data class GPTAction(
+    val verb: String,
+    val path: String,
+    val parameters: List<Parameter> = listOf()
+)
+
+data class Parameter(
+    val name: String,
+    val value: Any? // Using Any? to account for potential null values or different types
+)
 
 class GptSampler : AbstractRestSampler() {
 
     override fun customizeAdHocInitialIndividuals() {
-        println("Initial")
+        rc.checkConnection()
+        val infoDto = rc.getSutInfo()
+        val problem = infoDto!!.restProblem
+        val openApiUrl = problem.openApiUrl
+
+        val actions = generateRestCalls(openApiUrl)
+
+        actions.forEach {
+            it.doInitialize()
+        }
+
         adHocInitialIndividuals.clear()
-
-        generateRestCalls()
-
-        for (i in 0 until 10) {
-            val ind = createIndividual(SampleType.SMART, mutableListOf(generateRestCall()))
+        for (action in actions) {
+            val ind = createIndividual(SampleType.SMART, mutableListOf(action))
             ind.doGlobalInitialize(searchGlobalState)
             adHocInitialIndividuals.add(ind)
         }
     }
 
-    private fun generateRestCalls(): List<RestCallAction> {
+    private fun generateRestCalls(openApiUrl: String): List<RestCallAction> {
 
-//        val rawYAML = requestCallsFromGPT()
+        // NOTE: here you can enable the call to GPT, but for testing use the hardcoded YAML
+        // val openApiBody = getOpenApiSchema(openApiUrl)
+        // val rawYAML = requestCallsFromGPT(openApiBody)
         val rawYAML = """actions:
   - verb: GET
     path: /
@@ -96,16 +131,85 @@ class GptSampler : AbstractRestSampler() {
         value: 500
       - name: y
         value: 1000
+
+  - verb: GET
+    path: /
+    parameters: []
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 0
+      - name: y
+        value: 100
+  
+  - verb: POST
+    path: /
+    parameters: []
+  
+  - verb: GET
+    path: /api/tcpPort
+    parameters: []
+  
+  - verb: GET
+    path: /api/tcpPortFailed
+    parameters: []
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: invalidParam
+        value: abc
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: 100
+      - name: invalidParam
+        value: abc
+  
+  - verb: POST
+    path: /
+    parameters:
+      - name: x
+        value: -50
+      - name: y
+        value: 200
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: null
+      - name: y
+        value: 0
+  
+  - verb: GET
+    path: /
+    parameters:
+      - name: x
+        value: 500
+      - name: y
+        value: 1000
         """
-        print(rawYAML)
 
         // Parse YAML
-//        return parseYAMLToCalls(rawYAML)
-
-        return listOf()
+        return parseYAMLToCalls(rawYAML)
     }
 
-    private fun requestCallsFromGPT(): String {
+    private fun getOpenApiSchema(openApiUrl: String): String {
+        val client = OkHttpClient()
+        val request = Request.Builder()
+            .url(openApiUrl)
+            .get()
+            .build()
+        val response = client.newCall(request).execute()
+        return response.body!!.string()
+    }
+
+    private fun requestCallsFromGPT(openApiBody: String): String {
         val token = System.getenv("OPENAI_TOKEN")
 
         val service = OpenAiService(token)
@@ -116,7 +220,7 @@ class GptSampler : AbstractRestSampler() {
                 listOf(
                     ChatMessage(
                         ChatMessageRole.SYSTEM.value(),
-                        getSystemMessage()
+                        getSystemMessage(openApiBody)
                     ),
                     ChatMessage(
                         ChatMessageRole.USER.value(),
@@ -130,83 +234,12 @@ class GptSampler : AbstractRestSampler() {
         return response.choices[0].message.content
     }
 
-    private fun getSystemMessage(): String {
-        // TODO: insert OpenAPI Schema
+    private fun getSystemMessage(openApiBody: String): String {
         return """
 VERY IMPORTANT!!! ONLY RESPOND WITH A SINGLE VALID YAML FILE 
 
 You are being used as a Fuzzer on the given API. I want to cover as many edge cases as possible. Analyze the following OpenAPI schema: \"\"\"
-openapi: 3.0.1
-info:
-  title: Micronaut
-  description: Micronaut Latest E2E Test API
-  version: latest
-paths:
-  /:
-    get:
-      summary: Endpoint to trigger a Micronaut crash with HTTP 500
-      description: Used to test a crash scenario.
-      operationId: index
-      parameters: []
-      responses:
-        "500":
-          description: Expected outcome (HTTP 500)
-        "200":
-          description: Successful response (HTTP 200)
-          content:
-            application/json:
-              schema:
-                type: string
-    post:
-      summary: POST Controller for testing
-      description: Returns a HTTP 200 response
-      operationId: indexPost
-      parameters:
-      - name: x
-        in: query
-        required: false
-        schema:
-          minimum: 0
-          type: integer
-          format: int32
-          nullable: true
-      - name: "y"
-        in: query
-        required: false
-        schema:
-          minimum: 0
-          type: integer
-          format: int32
-          nullable: true
-      responses:
-        "200":
-          description: Successful POST request (HTTP 200)
-          content:
-            application/json:
-              schema:
-                type: string
-  /api/tcpPort:
-    get:
-      operationId: tcpPort
-      parameters: []
-      responses:
-        "200":
-          description: Successful response for TCP Port (HTTP 200)
-          content:
-            application/json:
-              schema:
-                type: string
-  /api/tcpPortFailed:
-    get:
-      operationId: tcpPortFailed
-      parameters: []
-      responses:
-        "200":
-          description: Successful response for a failed TCP Port (HTTP 200)
-          content:
-            application/json:
-              schema:
-                type: string
+$openApiBody
 \"\"\"
 
 I want any response to be of the following format YAML: \"\"\"
@@ -222,44 +255,44 @@ actions:
 """
     }
 
-//    private fun parseYAMLToCalls(rawYAML: String): List<RestCallAction> {
-//        val yaml = Yaml()
-//        val actionsList: ActionsList = yaml.loadAs(rawYAML, ActionsList::class.java)
-//
-//        val actions: MutableList<RestCallAction> = mutableListOf()
-////        for (yamlAction in yamlActions) {
-////            val paramsAny = yamlAction["parameters"]
-////            actions.add(RestCallAction(
-////                id = "id",
-////                verb = HttpVerb.valueOf(yamlAction["verb"]!!),
-////                path = RestPath(yamlAction["path"]!!),
-////                parameters = mutableListOf(),
-////                auth = NoAuth(),
-////                saveLocation = false,
-////                locationId = null,
-////                produces = listOf(),
-////                responseRefs = mutableMapOf(),
-////                skipOracleChecks = false
-////            ))
-////        }
-//
-//        return actions
-//    }
+    private fun parseYAMLToCalls(rawYAML: String): List<RestCallAction> {
+        val mapper = ObjectMapper(YAMLFactory())
+        mapper.registerModule(KotlinModule())
 
-    private fun generateRestCall(): RestCallAction {
-        // TODO: Implement GPT
-        return RestCallAction(
-            id = "id",
-            verb = HttpVerb.GET,
-            path = RestPath("/"),
-            parameters = mutableListOf(),
-            auth = NoAuth(),
-            saveLocation = false,
-            locationId = null,
-            produces = listOf(),
-            responseRefs = mutableMapOf(),
-            skipOracleChecks = false
-        )
+        val mappedYaml = mapper.readValue(rawYAML.toByteArray(), GPTActions::class.java)
+
+        val actions: MutableList<RestCallAction> = mutableListOf()
+        for (action in mappedYaml.actions) {
+            action.parameters
+
+            val params = action.parameters.map {
+                BodyParam(
+                    gene = StringGene(
+                        name = it.name,
+                        value = it.value.toString()
+                    ),
+                    typeGene = EnumGene(
+                        name = "${it.name}-gene",
+                        data = listOf()
+                    )
+                )
+            }
+
+            actions.add(RestCallAction(
+                id = "ID",
+                verb = HttpVerb.valueOf(action.verb),
+                path = RestPath(action.path),
+                parameters = params.toMutableList(),
+                auth = NoAuth(),
+                saveLocation = false,
+                locationId = null,
+                produces = listOf(),
+                responseRefs = mutableMapOf(),
+                skipOracleChecks = false
+            ))
+        }
+
+        return actions
     }
 
     companion object {

@@ -78,7 +78,7 @@ abstract class Sampler<T> : TrackOperator where T : Individual {
         // GPT: Sampler
         val ind = if (forceRandomSample) {
             sampleAtRandom()
-        } else if ( config.isEnabledSmartSampling() && (hasSpecialInitForSmartSampler() ||  randomness.nextBoolean(config.probOfSmartSampling))) {
+        } else if (config.useGptModel || config.isEnabledSmartSampling() && (hasSpecialInitForSmartSampler() ||  randomness.nextBoolean(config.probOfSmartSampling))) {
             // If there is still special init set, sample from that, otherwise depend on probability
             smartSample()
         } else {
