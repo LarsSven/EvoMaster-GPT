@@ -1,6 +1,7 @@
 package org.evomaster.core.search.algorithms
 
 import org.evomaster.core.EMConfig
+import org.evomaster.core.Lazy
 import org.evomaster.core.problem.rest.RestCallAction
 import org.evomaster.core.problem.rest.RestCallResult
 import org.evomaster.core.problem.rest.RestIndividual
@@ -20,6 +21,23 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
     }
 
     override fun searchOnce() {
+        if(archive.isEmpty()) {
+            // Sample using the GPT sampler
+            val ind = sampler.sample()
+
+            Lazy.assert { ind.isInitialized() && ind.searchGlobalState!=null }
+
+            ff.calculateCoverage(ind)?.run {
+
+                archive.addIfNeeded(this)
+                sampler.feedback(this)
+                if (sampler.isLastSeededIndividual())
+                    archive.archiveCoveredStatisticsBySeededTests()
+            }
+
+            return
+        }
+
         val individual = archive.sampleIndividual()
 
         val newIndividual = generateNewIndividual(individual)
