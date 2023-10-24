@@ -5,12 +5,18 @@ import org.evomaster.core.Lazy
 import org.evomaster.core.problem.rest.RestCallAction
 import org.evomaster.core.problem.rest.RestCallResult
 import org.evomaster.core.problem.rest.RestIndividual
+import org.evomaster.core.problem.rest.service.GptSampler
 import org.evomaster.core.search.EvaluatedIndividual
 import org.evomaster.core.search.FitnessValue
 import org.evomaster.core.search.Individual
+import org.evomaster.core.search.service.Randomness
 import org.evomaster.core.search.service.SearchAlgorithm
+import org.evomaster.core.utils.GptHelper
 
 class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
+
+    private lateinit var helper: GptHelper
+
     override fun getType(): EMConfig.Algorithm {
         return EMConfig.Algorithm.GPT
     }
@@ -35,6 +41,8 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
                     archive.archiveCoveredStatisticsBySeededTests()
             }
 
+            this.helper = GptHelper((sampler as GptSampler).openApiBody)
+
             return
         }
 
@@ -54,12 +62,17 @@ class GptAlgorithm<T> : SearchAlgorithm<T>() where T : Individual {
 
 
         val newRestIndividual = RestIndividual(restCalls, sampleType = oldRestIndividual.sampleType)
+        newRestIndividual.doInitialize()
 
         return ff.calculateCoverage(newRestIndividual as T) ?: throw Exception("Could not cast to T")
     }
 
     private fun improveRestCalls(calls: MutableList<RestCallAction>, fitness: FitnessValue): MutableList<RestCallAction> {
-        // TODO: Implement GPT
-        return calls
+        try {
+            return helper.requestImprovedCallsFromGpt(calls, fitness).toMutableList()
+        } catch (e: java.lang.Exception) {
+            println("> COULD NOT PARSE IMPROVED CALLS, TRY AGAIN")
+            return improveRestCalls(calls, fitness)
+        }
     }
 }
